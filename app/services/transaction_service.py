@@ -86,11 +86,20 @@ async def _lock_accounts_for_update(
     # Canonical lock order: always smaller UUID first to prevent deadlocks
     first_id, second_id = sorted([id1, id2])
 
+    # ``populate_existing=True`` is CRITICAL for concurrency safety: the
+    # ownership pre-check (step 3 in ``execute_transfer``) already loaded these
+    # Account rows into the session's identity map with a *stale* balance and
+    # no lock.  Without ``populate_existing`` SQLAlchemy would return those
+    # cached objects and silently discard the freshly-locked row data — so a
+    # second concurrent transfer, after the FOR UPDATE lock is granted, would
+    # still see the pre-deduction balance and double-spend.  Forcing a refresh
+    # guarantees the locked rows reflect the latest committed state.
     stmt = (
         select(Account)
         .where(Account.id.in_([first_id, second_id]))
         .with_for_update()
         .order_by(Account.id)
+        .execution_options(populate_existing=True)
     )
     result = await db.execute(stmt)
     accounts = list(result.scalars().all())
