@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint, type-check & test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexobank
+          POSTGRES_PASSWORD: nexobank_test
+          POSTGRES_DB: nexobank_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexobank -d nexobank_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://nexobank:nexobank_test@localhost:5432/nexobank_test
+      TEST_DATABASE_URL: postgresql+asyncpg://nexobank:nexobank_test@localhost:5432/nexobank_test
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-test-secret-key-not-for-production-use-only-00000000000000000000
+      INTERNAL_API_KEY: ci-internal-api-key-for-testing
+      ENVIRONMENT: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type-check (mypy)
+        run: mypy app/
+
+      - name: Tests (pytest)
+        run: pytest

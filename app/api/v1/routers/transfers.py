@@ -19,14 +19,18 @@ Design notes
   ``transaction_service``, not here.  The router only handles HTTP concerns.
 - ``request.client.host`` can be ``None`` for unit-test clients; it is passed
   as-is to the service, which accepts ``None``.
+- ``from __future__ import annotations`` is intentionally absent: slowapi's
+  ``@limiter.limit`` decorator resolves parameter types at decoration time, and
+  PEP 563 lazy evaluation causes FastAPI to lose the request body type.
 """
 
-from __future__ import annotations
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Body, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.rate_limit import limiter
 from app.schemas.transaction import TransactionResponse, TransferRequest
 from app.services import transaction_service
 from app.workers.notification_tasks import send_transaction_notification_task
@@ -43,12 +47,14 @@ router = APIRouter(tags=["transfers"])
         "Transfers money from one account to another atomically. "
         "Requires authentication; the authenticated user must own the source account. "
         "Provide a unique ``idempotency_key`` per logical transfer; repeating the same "
-        "key returns the original response without re-applying the transfer."
+        "key returns the original response without re-applying the transfer. "
+        "Rate-limited to 10 requests per minute per IP."
     ),
 )
+@limiter.limit("10/minute")
 async def create_transfer(
-    body: TransferRequest,
     request: Request,
+    body: Annotated[TransferRequest, Body()],
     current_user: object = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> TransactionResponse:
