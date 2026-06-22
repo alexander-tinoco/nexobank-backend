@@ -14,10 +14,11 @@ Key points
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # ── Alembic config object — gives access to alembic.ini values ──────────────
 config = context.config
@@ -28,11 +29,15 @@ if config.config_file_name is not None:
 
 # ── Import application settings and ORM metadata ─────────────────────────────
 from app.core.config import settings  # noqa: E402
+from app.models import (  # noqa: E402, F401 — registra todas las tablas en Base.metadata
+    Account,
+    AuditLog,
+    Card,
+    RefreshToken,
+    Transaction,
+    User,
+)
 from app.models.base import Base  # noqa: E402
-
-# Import all model modules so their tables are registered on Base.metadata.
-# Add new model imports here as other agents create models:
-# from app.models import user, account, card, transaction  # noqa: F401
 
 target_metadata = Base.metadata
 

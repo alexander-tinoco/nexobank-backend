@@ -23,7 +23,6 @@ from app.core.exceptions import (
 from app.models.account import Account, AccountStatus, AccountType
 from app.services import account_service
 
-
 # ---------------------------------------------------------------------------
 # Helpers — simple in-memory fake Account
 # ---------------------------------------------------------------------------

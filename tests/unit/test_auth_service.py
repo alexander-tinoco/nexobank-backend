@@ -18,7 +18,6 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole, UserStatus
 from app.services import auth_service
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

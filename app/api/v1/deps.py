@@ -27,7 +27,8 @@ model modules that may themselves import from ``app.core``.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -73,7 +74,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
     db: AsyncSession = Depends(get_db),
-) -> "User":
+) -> User:
     """Decode the JWT and return the authenticated ``User`` record.
 
     Raises ``HTTP 401`` if:
@@ -118,8 +119,8 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: "User" = Depends(get_current_user),
-) -> "User":
+    current_user: User = Depends(get_current_user),
+) -> User:
     """Return *current_user* only if the account is active.
 
     Raises ``HTTP 403`` for inactive / suspended accounts so that the client

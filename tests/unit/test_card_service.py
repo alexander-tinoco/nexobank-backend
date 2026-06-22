@@ -25,7 +25,6 @@ from app.models.account import Account, AccountStatus, AccountType
 from app.models.card import Card, CardStatus, CardType
 from app.services import card_service
 
-
 # ---------------------------------------------------------------------------
 # Helpers — simple in-memory fakes
 # ---------------------------------------------------------------------------

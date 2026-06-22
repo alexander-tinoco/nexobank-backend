@@ -42,7 +42,6 @@ from app.core.exceptions import (
 )
 from app.models.transaction import Transaction, TransactionStatus, TransactionType
 
-
 # ---------------------------------------------------------------------------
 # Fake helpers
 # ---------------------------------------------------------------------------

@@ -23,12 +23,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
-class CardType(str, enum.Enum):
+class CardType(enum.StrEnum):
     debit = "debit"
     credit = "credit"
 
 
-class CardStatus(str, enum.Enum):
+class CardStatus(enum.StrEnum):
     active = "active"
     frozen = "frozen"
     cancelled = "cancelled"

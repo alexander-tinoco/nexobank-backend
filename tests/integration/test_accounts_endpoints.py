@@ -31,7 +31,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import get_current_active_user, get_db
 from app.main import app
 
-
 # ---------------------------------------------------------------------------
 # Fake user — returned by the overridden dependency
 # ---------------------------------------------------------------------------

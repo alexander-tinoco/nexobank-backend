@@ -124,7 +124,9 @@ async def receive_risk_event(
     - 0.5 <= risk_score < 0.8: flagged (log + audit)
     - risk_score >= 0.8: blocked (log + audit + TODO: suspender cuenta en mes 5)
     """
-    from app.repositories.audit_log_repository import AuditLogRepository  # noqa: PLC0415
+    from app.repositories.audit_log_repository import (
+        AuditLogRepository,  # noqa: PLC0415
+    )
 
     if body.risk_score >= 0.8:
         action = "blocked"

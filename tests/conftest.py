@@ -21,17 +21,15 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncGenerator
-from typing import Any
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.v1.deps import get_db
 from app.main import app

@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import Enum as SAEnum, Index, String
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
 
-class UserStatus(str, enum.Enum):
+class UserStatus(enum.StrEnum):
     """Lifecycle state of a user account."""
 
     active = "active"
@@ -28,7 +29,7 @@ class UserStatus(str, enum.Enum):
     suspended = "suspended"
 
 
-class UserRole(str, enum.Enum):
+class UserRole(enum.StrEnum):
     """Coarse-grained permission level."""
 
     customer = "customer"

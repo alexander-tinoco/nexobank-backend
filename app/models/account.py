@@ -24,13 +24,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
-class AccountStatus(str, enum.Enum):
+class AccountStatus(enum.StrEnum):
     active = "active"
     frozen = "frozen"
     closed = "closed"
 
 
-class AccountType(str, enum.Enum):
+class AccountType(enum.StrEnum):
     checking = "checking"
     savings = "savings"
 

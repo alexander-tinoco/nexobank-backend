@@ -24,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
-class TransactionType(str, enum.Enum):
+class TransactionType(enum.StrEnum):
     """Enumeration of the four atomic movements in the double-entry ledger."""
 
     deposit = "deposit"
@@ -33,7 +33,7 @@ class TransactionType(str, enum.Enum):
     transfer_in = "transfer_in"  # credit to the destination account
 
 
-class TransactionStatus(str, enum.Enum):
+class TransactionStatus(enum.StrEnum):
     """Lifecycle status of a transaction."""
 
     pending = "pending"
