@@ -1,8 +1,8 @@
 """Integration tests for account and card endpoints.
 
-These tests exercise the full request/response cycle through the FastAPI app
-but override the authentication dependency so they do not depend on a real User
-model being available (the User model is owned by another module).
+These tests exercise the full request/response cycle through the FastAPI app.
+Authentication is bypassed by overriding ``get_current_active_user``, but a real
+User row is inserted so that FK constraints on the ``accounts`` table are met.
 
 The database is a real PostgreSQL instance (see ``tests/conftest.py``).
 
@@ -21,7 +21,6 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
@@ -32,15 +31,23 @@ from app.api.v1.deps import get_current_active_user, get_db
 from app.main import app
 
 # ---------------------------------------------------------------------------
-# Fake user — returned by the overridden dependency
+# Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_user(user_id: uuid.UUID) -> Any:
-    """Return a minimal object that satisfies the User interface used in routers."""
-    user = MagicMock()
-    user.id = user_id
-    user.is_active = True
+async def _insert_user(db: AsyncSession, user_id: uuid.UUID) -> Any:
+    """Insert a minimal User row so FK constraints on accounts are satisfied."""
+    from app.models.user import User  # noqa: PLC0415
+
+    user = User(
+        id=user_id,
+        email=f"test-{user_id}@example.com",
+        full_name="Test User",
+        password_hash="$argon2id$v=19$m=65536,t=3,p=4$fake",
+        is_active=True,
+    )
+    db.add(user)
+    await db.flush()
     return user
 
 
@@ -53,15 +60,19 @@ def _make_fake_user(user_id: uuid.UUID) -> Any:
 async def authenticated_client(
     db_session: AsyncSession,
 ) -> AsyncGenerator[tuple[AsyncClient, uuid.UUID], None]:
-    """Yield (client, user_id) with auth dependency overridden to a fake user."""
+    """Yield (client, user_id) with auth dependency overridden.
+
+    A real User row is inserted so that FK constraints on accounts are satisfied.
+    ``get_current_active_user`` is still overridden so authentication is bypassed.
+    """
     user_id = uuid.uuid4()
-    fake_user = _make_fake_user(user_id)
+    user = await _insert_user(db_session, user_id)
 
     async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     def _override_get_current_active_user() -> Any:
-        return fake_user
+        return user
 
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[get_current_active_user] = _override_get_current_active_user
@@ -83,13 +94,13 @@ async def second_user_client(
 ) -> AsyncGenerator[tuple[AsyncClient, uuid.UUID], None]:
     """Yield (client, user_id) for a *second* user — used to test ownership checks."""
     user_id = uuid.uuid4()
-    fake_user = _make_fake_user(user_id)
+    user = await _insert_user(db_session, user_id)
 
     async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     def _override_get_current_active_user() -> Any:
-        return fake_user
+        return user
 
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[get_current_active_user] = _override_get_current_active_user
@@ -256,13 +267,13 @@ async def test_cannot_access_another_users_account(
 
     # User B tries to access user A's account using a separate client
     user_b_id = uuid.uuid4()
-    fake_user_b = _make_fake_user(user_b_id)
+    user_b = await _insert_user(db_session, user_b_id)
 
     async def _override_get_db_b() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     def _override_user_b() -> Any:
-        return fake_user_b
+        return user_b
 
     app.dependency_overrides[get_db] = _override_get_db_b
     app.dependency_overrides[get_current_active_user] = _override_user_b
