@@ -203,4 +203,4 @@ async def nexobank_exception_handler(
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register all domain exception handlers on *app*."""
-    app.add_exception_handler(NexoBankError, nexobank_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(NexoBankError, nexobank_exception_handler)

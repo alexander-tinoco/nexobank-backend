@@ -8,6 +8,7 @@ Rules (from CLAUDE.md)
 """
 
 import uuid
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +19,10 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.models.account import Account, AccountType
+from app.models.transaction import Transaction, TransactionStatus, TransactionType
 from app.repositories.account_repository import AccountRepository
 from app.repositories.audit_log_repository import AuditLogRepository
+from app.repositories.transaction_repository import TransactionRepository
 from app.schemas.account import SUPPORTED_CURRENCIES
 
 logger = get_logger(__name__)
@@ -117,3 +120,60 @@ async def get_account(
         )
 
     return account
+
+
+async def deposit_funds(
+    db: AsyncSession,
+    *,
+    account_id: uuid.UUID,
+    requesting_user_id: uuid.UUID,
+    amount: Decimal,
+    description: str | None = None,
+    ip_address: str | None = None,
+) -> Transaction:
+    """Credit *amount* to an account owned by *requesting_user_id*.
+
+    Creates a ``deposit`` Transaction and updates the account balance atomically.
+    Raises ``AccountNotFoundError`` or ``UnauthorizedResourceError`` on failure.
+    """
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from app.models.account import Account  # noqa: PLC0415
+
+    result = await db.execute(
+        select(Account).where(Account.id == account_id).with_for_update()
+    )
+    account = result.scalar_one_or_none()
+
+    if account is None:
+        raise AccountNotFoundError(f"Account '{account_id}' not found.")
+
+    if account.user_id != requesting_user_id:
+        raise UnauthorizedResourceError("You do not have permission to deposit into this account.")
+
+    account.balance += amount
+
+    tx = await TransactionRepository.create(
+        db,
+        account_id=account_id,
+        type=TransactionType.deposit,
+        amount=amount,
+        status=TransactionStatus.completed,
+        description=description or "External deposit",
+    )
+
+    await AuditLogRepository.log(
+        db,
+        action="DEPOSIT_COMPLETED",
+        user_id=requesting_user_id,
+        entity_type="transaction",
+        entity_id=tx.id,
+        ip_address=ip_address,
+        metadata={"amount": str(amount), "account_id": str(account_id)},
+    )
+
+    logger.info(
+        "Deposit completed",
+        extra={"account_id": str(account_id), "amount": str(amount)},
+    )
+    return tx

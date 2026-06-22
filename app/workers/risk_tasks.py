@@ -12,13 +12,13 @@ from app.workers.celery_app import celery_app
 logger = get_logger(__name__)
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[misc]
     name="nexobank.evaluate_transaction_risk",
     bind=True,
     max_retries=2,
 )
 def evaluate_transaction_risk_task(
-    self,  # type: ignore[misc]
+    self: Any,
     transaction_id: str,
     user_id: str,
     amount: str,  # Decimal serializado como str

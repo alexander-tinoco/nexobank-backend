@@ -2,9 +2,10 @@
 
 Endpoints
 ---------
-GET  /accounts           List all accounts for the authenticated user.
-POST /accounts           Open a new bank account.
-GET  /accounts/{id}      Retrieve details of a specific account.
+GET  /accounts                   List all accounts for the authenticated user.
+POST /accounts                   Open a new bank account.
+GET  /accounts/{id}              Retrieve details of a specific account.
+POST /accounts/{id}/deposit      Deposit funds into an account.
 
 All business logic lives in ``app.services.account_service``; this module only
 handles HTTP concerns (parsing, dependency injection, response serialisation).
@@ -14,11 +15,17 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
-from app.schemas.account import AccountCreate, AccountListResponse, AccountResponse
+from app.schemas.account import (
+    AccountCreate,
+    AccountListResponse,
+    AccountResponse,
+    DepositRequest,
+)
+from app.schemas.transaction import TransactionResponse
 from app.services import account_service
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -92,3 +99,39 @@ async def get_account(
         requesting_user_id=user.id,
     )
     return AccountResponse.model_validate(account)
+
+
+@router.post(
+    "/{account_id}/deposit",
+    response_model=TransactionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Deposit funds",
+    description=(
+        "Credit funds into an account owned by the authenticated user. "
+        "This simulates an incoming external transfer (e.g. SPEI/ACH). "
+        "The operation is atomic and writes an immutable AuditLog entry."
+    ),
+)
+async def deposit(
+    account_id: uuid.UUID,
+    payload: DepositRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: object = Depends(get_current_active_user),
+) -> TransactionResponse:
+    """Deposit funds into the specified account."""
+    from app.models.user import User  # noqa: PLC0415
+
+    user: User = current_user  # type: ignore[assignment]
+    ip = request.client.host if request.client else None
+
+    tx = await account_service.deposit_funds(
+        db,
+        account_id=account_id,
+        requesting_user_id=user.id,
+        amount=payload.amount,
+        description=payload.description,
+        ip_address=ip,
+    )
+    await db.commit()
+    return TransactionResponse.model_validate(tx)

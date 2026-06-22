@@ -36,9 +36,13 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from app.models.account import Account
 
 from app.core.exceptions import (
     AccountFrozenError,
@@ -61,7 +65,7 @@ async def _lock_accounts_for_update(
     db: AsyncSession,
     id1: uuid.UUID,
     id2: uuid.UUID,
-) -> tuple[object, object]:
+) -> tuple[Account, Account]:
     """Lock both account rows with SELECT … FOR UPDATE in a deterministic order.
 
     Acquiring locks in ascending UUID order eliminates the classic A→B / B→A
@@ -94,21 +98,21 @@ async def _lock_accounts_for_update(
     if len(accounts) != 2:
         raise AccountNotFoundError("One or both accounts were not found.")
 
-    by_id: dict[uuid.UUID, object] = {a.id: a for a in accounts}  # type: ignore[union-attr]
+    by_id: dict[uuid.UUID, Account] = {a.id: a for a in accounts}
     return by_id[id1], by_id[id2]
 
 
-def _validate_account_active(account: object, label: str) -> None:
+def _validate_account_active(account: Account, label: str) -> None:
     """Raise AccountFrozenError if *account*.status is not 'active'."""
     from app.models.account import AccountStatus  # noqa: PLC0415
 
-    if account.status != AccountStatus.active:  # type: ignore[union-attr]
+    if account.status != AccountStatus.active:
         raise AccountFrozenError(f"Account '{label}' is frozen and cannot process transactions.")
 
 
-def _validate_account_owner(account: object, user_id: uuid.UUID) -> None:
+def _validate_account_owner(account: Account, user_id: uuid.UUID) -> None:
     """Raise UnauthorizedResourceError if *account* is not owned by *user_id*."""
-    if account.user_id != user_id:  # type: ignore[union-attr]
+    if account.user_id != user_id:
         raise UnauthorizedResourceError(
             "You are not authorized to transfer funds from this account."
         )
@@ -226,29 +230,29 @@ async def execute_transfer(
     _validate_account_active(from_account, "source")
     _validate_account_active(to_account, "destination")
 
-    if from_account.currency != currency_upper:  # type: ignore[union-attr]
+    if from_account.currency != currency_upper:
         raise UnsupportedCurrencyError(
-            f"Source account currency is '{from_account.currency}', "  # type: ignore[union-attr]
+            f"Source account currency is '{from_account.currency}', "
             f"but transfer requested in '{currency_upper}'."
         )
 
-    if to_account.currency != currency_upper:  # type: ignore[union-attr]
+    if to_account.currency != currency_upper:
         raise UnsupportedCurrencyError(
-            f"Destination account currency is '{to_account.currency}', "  # type: ignore[union-attr]
+            f"Destination account currency is '{to_account.currency}', "
             f"but transfer requested in '{currency_upper}'."
         )
 
-    if from_account.balance < amount:  # type: ignore[union-attr]
+    if from_account.balance < amount:
         raise InsufficientFundsError(
-            f"Insufficient funds: balance is {from_account.balance}, "  # type: ignore[union-attr]
+            f"Insufficient funds: balance is {from_account.balance}, "
             f"attempted to transfer {amount}."
         )
 
     # ------------------------------------------------------------------
     # Step 6 — apply balance mutations
     # ------------------------------------------------------------------
-    from_account.balance -= amount  # type: ignore[union-attr]
-    to_account.balance += amount  # type: ignore[union-attr]
+    from_account.balance -= amount
+    to_account.balance += amount
 
     # Flush the balance updates so the DB sees them before the transaction rows
     await db.flush()

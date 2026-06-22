@@ -36,15 +36,15 @@ def _make_account(
     status: AccountStatus = AccountStatus.active,
 ) -> Account:
     """Return a minimal Account ORM instance (not backed by a real DB)."""
-    account = Account.__new__(Account)
-    account.id = uuid.uuid4()
-    account.user_id = user_id or uuid.uuid4()
-    account.account_number = f"{currency}123456789012"
-    account.currency = currency
-    account.balance = Decimal("0.00")
-    account.status = status
-    account.type = account_type
-    return account
+    return Account(
+        id=uuid.uuid4(),
+        user_id=user_id or uuid.uuid4(),
+        account_number=f"{currency}123456789012",
+        currency=currency,
+        balance=Decimal("0.00"),
+        status=status,
+        type=account_type,
+    )
 
 
 # ---------------------------------------------------------------------------

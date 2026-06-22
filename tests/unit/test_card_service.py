@@ -35,15 +35,15 @@ def _make_account(
     user_id: uuid.UUID | None = None,
     status: AccountStatus = AccountStatus.active,
 ) -> Account:
-    account = Account.__new__(Account)
-    account.id = uuid.uuid4()
-    account.user_id = user_id or uuid.uuid4()
-    account.account_number = "MXN123456789012"
-    account.currency = "MXN"
-    account.balance = Decimal("0.00")
-    account.status = status
-    account.type = AccountType.checking
-    return account
+    return Account(
+        id=uuid.uuid4(),
+        user_id=user_id or uuid.uuid4(),
+        account_number="MXN123456789012",
+        currency="MXN",
+        balance=Decimal("0.00"),
+        status=status,
+        type=AccountType.checking,
+    )
 
 
 def _make_card(
@@ -52,14 +52,14 @@ def _make_card(
     card_type: CardType = CardType.debit,
     status: CardStatus = CardStatus.active,
 ) -> Card:
-    card = Card.__new__(Card)
-    card.id = uuid.uuid4()
-    card.account_id = account_id or uuid.uuid4()
-    card.last4 = "1234"
-    card.type = card_type
-    card.status = status
-    card.expires_at = date.today() + timedelta(days=365 * 3)
-    return card
+    return Card(
+        id=uuid.uuid4(),
+        account_id=account_id or uuid.uuid4(),
+        last4="1234",
+        type=card_type,
+        status=status,
+        expires_at=date.today() + timedelta(days=365 * 3),
+    )
 
 
 # ---------------------------------------------------------------------------

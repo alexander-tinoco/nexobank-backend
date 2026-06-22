@@ -55,3 +55,17 @@ class AccountListResponse(BaseModel):
 
     items: list[AccountResponse]
     total: int
+
+
+class DepositRequest(BaseModel):
+    """Input schema for POST /accounts/{id}/deposit."""
+
+    amount: Decimal
+    description: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, value: Decimal) -> Decimal:
+        if value <= 0:
+            raise ValueError("Deposit amount must be greater than zero.")
+        return value

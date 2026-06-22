@@ -1,9 +1,22 @@
-"""WebSocket endpoint para notificaciones en tiempo real."""
+"""WebSocket endpoint para notificaciones en tiempo real.
 
-from typing import Any
+Flujo:
+1. Cliente conecta con JWT en query param ``?token=<access_token>``
+2. Servidor autentica y acepta la conexión
+3. Servidor suscribe al canal Redis ``nexobank:notifications:user:{user_id}``
+4. Mensajes publicados en ese canal se reenvían al cliente en tiempo real
+5. Cliente puede enviar ``{"type": "ping"}`` y recibe ``{"type": "pong"}``
+
+Al desconectar, el servidor cancela la suscripción Redis y cierra el cliente.
+"""
+
+from __future__ import annotations
+
+import asyncio
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import decode_access_token
 
@@ -11,37 +24,11 @@ logger = get_logger(__name__)
 
 router = APIRouter(tags=["websockets"])
 
-
-class ConnectionManager:
-    """Gestiona conexiones WebSocket activas por user_id."""
-
-    def __init__(self) -> None:
-        # user_id -> list of websocket connections (un usuario puede tener varias sesiones)
-        self._connections: dict[str, list[WebSocket]] = {}
-
-    async def connect(self, websocket: WebSocket, user_id: str) -> None:
-        await websocket.accept()
-        self._connections.setdefault(user_id, []).append(websocket)
-        logger.info("WebSocket connected", extra={"user_id": user_id})
-
-    def disconnect(self, websocket: WebSocket, user_id: str) -> None:
-        conns = self._connections.get(user_id, [])
-        if websocket in conns:
-            conns.remove(websocket)
-        if not conns:
-            self._connections.pop(user_id, None)
-        logger.info("WebSocket disconnected", extra={"user_id": user_id})
-
-    async def send_to_user(self, user_id: str, message: dict[str, Any]) -> None:
-        """Envía un mensaje a todas las conexiones activas del usuario."""
-        for ws in self._connections.get(user_id, []):
-            try:
-                await ws.send_json(message)
-            except Exception:
-                pass  # conexión cerrada — se limpiará en disconnect
+CHANNEL_PREFIX = "nexobank:notifications:user:"
 
 
-manager = ConnectionManager()
+def user_channel(user_id: str) -> str:
+    return f"{CHANNEL_PREFIX}{user_id}"
 
 
 @router.websocket("/ws/notifications")
@@ -54,33 +41,69 @@ async def websocket_notifications(
 
     Autenticación: JWT en query param ``?token=<access_token>``
 
-    Eventos que el servidor envía:
+    Eventos que el servidor envía::
 
-    - ``{"type": "transaction", "data": {...}}``
-    - ``{"type": "ping", "data": {}}``
+        {"type": "connected",         "data": {"user_id": "..."}}
+        {"type": "transfer_sent",     "data": {"amount": "...", "tx_id": "..."}}
+        {"type": "transfer_received", "data": {"amount": "...", "tx_id": "..."}}
+        {"type": "pong",              "data": {}}
 
-    El cliente puede enviar:
+    El cliente puede enviar::
 
-    - ``{"type": "ping"}`` → servidor responde ``{"type": "pong"}``
+        {"type": "ping"}
     """
+    import redis.asyncio as aioredis  # noqa: PLC0415
+
     subject = decode_access_token(token)
     if subject is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     user_id = subject
-    await manager.connect(websocket, user_id)
+    await websocket.accept()
+    await websocket.send_json({"type": "connected", "data": {"user_id": user_id}})
+    logger.info("WebSocket connected", extra={"user_id": user_id})
+
+    redis_client: aioredis.Redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)  # type: ignore[no-untyped-call]
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(user_channel(user_id))
+
+    stop_event = asyncio.Event()
+
+    async def redis_forwarder() -> None:
+        """Lee mensajes de Redis y los reenvía al WebSocket."""
+        try:
+            async for message in pubsub.listen():
+                if stop_event.is_set():
+                    break
+                if message["type"] == "message":
+                    await websocket.send_text(message["data"])
+        except Exception:
+            pass
+
+    async def client_handler() -> None:
+        """Procesa mensajes entrantes del cliente (ping/pong)."""
+        try:
+            while True:
+                data = await websocket.receive_json()
+                if data.get("type") == "ping":
+                    await websocket.send_json({"type": "pong", "data": {}})
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+
+    forwarder_task = asyncio.ensure_future(redis_forwarder())
+    client_task = asyncio.ensure_future(client_handler())
 
     try:
-        await websocket.send_json({"type": "connected", "data": {"user_id": user_id}})
-
-        while True:
-            data = await websocket.receive_json()
-            if data.get("type") == "ping":
-                await websocket.send_json({"type": "pong", "data": {}})
-
-    except WebSocketDisconnect:
-        manager.disconnect(websocket, user_id)
-    except Exception as exc:
-        logger.error("WebSocket error", extra={"user_id": user_id, "error": str(exc)})
-        manager.disconnect(websocket, user_id)
+        await asyncio.gather(forwarder_task, client_task)
+    except Exception:
+        pass
+    finally:
+        stop_event.set()
+        forwarder_task.cancel()
+        client_task.cancel()
+        await pubsub.unsubscribe(user_channel(user_id))
+        await redis_client.aclose()
+        logger.info("WebSocket disconnected", extra={"user_id": user_id})

@@ -30,17 +30,15 @@ def _make_user(
     role: UserRole = UserRole.customer,
 ) -> User:
     """Build a User ORM object without touching the database."""
-    user = User.__new__(User)
-    user.id = uuid.uuid4()
-    user.email = email
-    user.password_hash = hash_password("Password1")
-    user.full_name = "Test User"
-    user.phone = None
-    user.status = status
-    user.role = role
-    user.created_at = datetime.now(UTC)
-    user.updated_at = datetime.now(UTC)
-    return user
+    return User(
+        id=uuid.uuid4(),
+        email=email,
+        password_hash=hash_password("Password1"),
+        full_name="Test User",
+        phone=None,
+        status=status,
+        role=role,
+    )
 
 
 def _make_refresh_token(
@@ -50,17 +48,15 @@ def _make_refresh_token(
     revoked: bool = False,
     expired: bool = False,
 ) -> RefreshToken:
-    rt = RefreshToken.__new__(RefreshToken)
-    rt.id = uuid.uuid4()
-    rt.user_id = user_id or uuid.uuid4()
-    rt.token_hash = token_hash
-    rt.revoked = revoked
-    rt.expires_at = datetime.now(UTC) + (
-        timedelta(hours=-1) if expired else timedelta(days=30)
+    return RefreshToken(
+        id=uuid.uuid4(),
+        user_id=user_id or uuid.uuid4(),
+        token_hash=token_hash,
+        revoked=revoked,
+        expires_at=datetime.now(UTC) + (
+            timedelta(hours=-1) if expired else timedelta(days=30)
+        ),
     )
-    rt.created_at = datetime.now(UTC)
-    rt.updated_at = datetime.now(UTC)
-    return rt
 
 
 # ---------------------------------------------------------------------------

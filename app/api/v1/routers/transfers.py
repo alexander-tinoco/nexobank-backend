@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import get_current_active_user, get_db
 from app.schemas.transaction import TransactionResponse, TransferRequest
 from app.services import transaction_service
+from app.workers.notification_tasks import send_transaction_notification_task
 
 router = APIRouter(tags=["transfers"])
 
@@ -77,5 +78,15 @@ async def create_transfer(
 
     # Commit here — the router owns the transaction boundary for write endpoints
     await db.commit()
+
+    # Fire-and-forget: notify both parties via Redis pub/sub → WebSocket
+    send_transaction_notification_task.delay(
+        sender_user_id=str(user.id),
+        receiver_account_id=str(body.to_account_id),
+        amount=str(body.amount),
+        currency=body.currency,
+        tx_id=str(tx_out.id),
+        description=body.description,
+    )
 
     return TransactionResponse.model_validate(tx_out)

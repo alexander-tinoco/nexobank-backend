@@ -8,7 +8,7 @@ from app.workers.celery_app import celery_app
 logger = get_logger(__name__)
 
 
-@celery_app.task(name="nexobank.cleanup_expired_refresh_tokens")
+@celery_app.task(name="nexobank.cleanup_expired_refresh_tokens")  # type: ignore[misc]
 def cleanup_expired_refresh_tokens_task() -> dict[str, Any]:
     """
     Borra refresh tokens expirados de la BD.
@@ -35,7 +35,7 @@ def cleanup_expired_refresh_tokens_task() -> dict[str, Any]:
     return {"deleted_count": count}
 
 
-@celery_app.task(name="nexobank.generate_monthly_statement")
+@celery_app.task(name="nexobank.generate_monthly_statement")  # type: ignore[misc]
 def generate_monthly_statement_task(
     user_id: str, account_id: str, year: int, month: int
 ) -> dict[str, Any]:
