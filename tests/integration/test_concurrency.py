@@ -35,7 +35,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from httpx import AsyncClient, Response
+from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytest.importorskip("app.models.account", reason="Account model not yet available")
@@ -97,7 +97,6 @@ def _auth_headers(user: Any) -> dict[str, str]:
 
 @pytest.mark.asyncio
 async def test_concurrent_transfers_no_double_spend(
-    async_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
     """Two simultaneous transfers of 600 from a 1000-balance account.
@@ -116,12 +115,18 @@ async def test_concurrent_transfers_no_double_spend(
     account_a = await _create_account(db_session, user_id=user_a.id, balance=Decimal("1000.00"))
     account_b = await _create_account(db_session, user_id=user_b.id, balance=Decimal("0.00"))
 
-    # Commit the setup so both concurrent requests see the same initial state
+    # Commit setup data so both concurrent requests can see it via independent sessions
     await db_session.commit()
 
     auth = _auth_headers(user_a)
 
-    async def do_transfer(key: str) -> Response:
+    # Use a fresh client WITHOUT the db_session dependency override.
+    # Each concurrent request must get its own asyncpg connection from the
+    # app's real pool. Using the shared db_session fixture connection for both
+    # asyncio.gather tasks triggers "another operation is in progress".
+    from app.main import app as _app  # noqa: PLC0415
+
+    async def do_transfer(client: AsyncClient, key: str) -> Response:
         payload = {
             "from_account_id": str(account_a.id),
             "to_account_id": str(account_b.id),
@@ -129,17 +134,21 @@ async def test_concurrent_transfers_no_double_spend(
             "currency": "MXN",
             "idempotency_key": key,  # different keys to avoid idempotency short-circuit
         }
-        return await async_client.post(
+        return await client.post(
             "/api/v1/transfers",
             json=payload,
             headers=auth,
         )
 
-    # Fire both requests concurrently
-    r1, r2 = await asyncio.gather(
-        do_transfer(key=str(uuid.uuid4())),
-        do_transfer(key=str(uuid.uuid4())),
-    )
+    async with AsyncClient(
+        transport=ASGITransport(app=_app),  # type: ignore[arg-type]
+        base_url="http://testserver",
+    ) as client:
+        # Fire both requests concurrently
+        r1, r2 = await asyncio.gather(
+            do_transfer(client, key=str(uuid.uuid4())),
+            do_transfer(client, key=str(uuid.uuid4())),
+        )
 
     statuses = {r1.status_code, r2.status_code}
 

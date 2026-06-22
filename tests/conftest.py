@@ -101,15 +101,16 @@ def test_session_factory(
 async def db_session(
     test_session_factory: async_sessionmaker[AsyncSession],
 ) -> AsyncGenerator[AsyncSession, None]:
-    """Yield a transactional AsyncSession that is rolled back after each test.
+    """Yield an AsyncSession for the test; roll back uncommitted changes on teardown.
 
-    Using ``SAVEPOINT`` (nested transactions) ensures the test is fully isolated
-    without needing to truncate tables between tests.
+    No explicit ``session.begin()`` here — SQLAlchemy's autobegin manages
+    transactions. Endpoints call ``await db.commit()`` when they need to
+    persist; the fixture rollback on teardown only cleans up any state that
+    was never explicitly committed (reads, flushes from failed code paths).
     """
     async with test_session_factory() as session:
-        async with session.begin():
-            yield session
-            await session.rollback()
+        yield session
+        await session.rollback()
 
 
 # ---------------------------------------------------------------------------
