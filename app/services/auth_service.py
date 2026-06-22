@@ -27,6 +27,9 @@ from app.core.security import (
 )
 from app.models.user import User, UserStatus
 from app.repositories.audit_log_repository import AuditLogRepository
+from app.repositories.password_reset_token_repository import (
+    PasswordResetTokenRepository,
+)
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 
@@ -271,6 +274,103 @@ async def logout_user(
     await db.commit()
 
     logger.info("User logged out", extra={"user_id": str(user_id)})
+
+
+async def request_password_reset(
+    db: AsyncSession,
+    *,
+    email: str,
+    ip_address: str | None = None,
+) -> tuple[str | None, bool]:
+    """Generate a one-time password reset token for the given email.
+
+    Returns ``(raw_token, is_dev_mode)``.  The raw token is ``None`` in
+    production — it must travel only via email, never in the response body.
+
+    Always returns without error even if the email does not exist (prevents
+    enumeration).  The caller decides whether to expose the token.
+    """
+    import secrets  # noqa: PLC0415
+
+    user = await UserRepository.get_by_email(db, email)
+
+    if user is None:
+        logger.info("Password reset requested for unknown email", extra={"ip": ip_address})
+        return None, not settings.is_production
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hash_token(raw_token)
+    expires_at = datetime.now(UTC) + timedelta(minutes=15)
+
+    await PasswordResetTokenRepository.create(
+        db,
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    )
+
+    await AuditLogRepository.log(
+        db,
+        action="PASSWORD_RESET_REQUESTED",
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+        ip_address=ip_address,
+    )
+
+    await db.commit()
+
+    logger.info("Password reset token created", extra={"user_id": str(user.id)})
+    is_dev = not settings.is_production
+    return (raw_token if is_dev else None), is_dev
+
+
+async def confirm_password_reset(
+    db: AsyncSession,
+    *,
+    raw_token: str,
+    new_password: str,
+    ip_address: str | None = None,
+) -> None:
+    """Consume a reset token and update the user's password.
+
+    Raises ``InvalidCredentialsError`` if the token is invalid, expired, or
+    already used.
+    """
+    token_hash = hash_token(raw_token)
+    stored = await PasswordResetTokenRepository.get_by_hash(db, token_hash)
+
+    if stored is None or stored.used:
+        raise InvalidCredentialsError("Reset token is invalid or has already been used.")
+
+    now = datetime.now(UTC)
+    expires_at = stored.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at < now:
+        raise InvalidCredentialsError("Reset token has expired.")
+
+    user = await UserRepository.get_by_id(db, stored.user_id)
+    if user is None:
+        raise InvalidCredentialsError("Reset token is invalid.")
+
+    new_hash = hash_password(new_password)
+    await UserRepository.update(db, user, password_hash=new_hash)
+
+    await PasswordResetTokenRepository.mark_used(db, stored)
+
+    await AuditLogRepository.log(
+        db,
+        action="PASSWORD_RESET_COMPLETED",
+        user_id=stored.user_id,
+        entity_type="user",
+        entity_id=stored.user_id,
+        ip_address=ip_address,
+    )
+
+    await db.commit()
+
+    logger.info("Password reset completed", extra={"user_id": str(stored.user_id)})
 
 
 async def update_user_profile(

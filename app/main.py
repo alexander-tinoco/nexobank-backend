@@ -30,6 +30,7 @@ from app.api.v1.routers import (
     accounts,
     auth,
     cards,
+    device_tokens,
     internal,
     transactions,
     transfers,
@@ -143,6 +144,7 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix=_API_PREFIX)
     app.include_router(accounts.router, prefix=_API_PREFIX)
     app.include_router(cards.router, prefix=_API_PREFIX)
+    app.include_router(device_tokens.router, prefix=_API_PREFIX)
     app.include_router(transactions.router, prefix=_API_PREFIX)
     app.include_router(transfers.router, prefix=_API_PREFIX)
     app.include_router(websockets.router, prefix=_API_PREFIX)

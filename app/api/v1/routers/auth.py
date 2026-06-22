@@ -20,10 +20,13 @@ from app.api.v1.deps import get_current_active_user, get_db
 from app.core.rate_limit import limiter
 from app.models.user import User
 from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from app.services import auth_service
@@ -129,5 +132,62 @@ async def logout(
         db,
         refresh_token_raw=body.refresh_token,
         user_id=current_user.id,
+        ip_address=ip,
+    )
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    summary="Request a password reset link",
+)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> ForgotPasswordResponse:
+    """Send a password reset token for the given email.
+
+    Always returns HTTP 200 regardless of whether the email is registered —
+    this prevents email enumeration attacks.
+
+    In non-production environments the reset token is included in the response
+    body so the flow can be tested without a configured email service.
+    In production the token travels only via email (implement your email
+    provider in ``auth_service.request_password_reset`` when ready).
+    """
+    ip = request.client.host if request.client else None
+    raw_token, is_dev = await auth_service.request_password_reset(
+        db,
+        email=str(body.email),
+        ip_address=ip,
+    )
+    return ForgotPasswordResponse(
+        message="If that email is registered you will receive a reset link shortly.",
+        reset_token=raw_token if is_dev else None,
+    )
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    summary="Reset password using a one-time token",
+)
+async def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Consume a reset token and update the account password.
+
+    The token expires after 15 minutes and can only be used once.
+    Returns 401 if the token is invalid, expired, or already used.
+    """
+    ip = request.client.host if request.client else None
+    await auth_service.confirm_password_reset(
+        db,
+        raw_token=body.token,
+        new_password=body.new_password,
         ip_address=ip,
     )
