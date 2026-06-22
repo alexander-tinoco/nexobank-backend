@@ -44,7 +44,6 @@ async def _insert_user(db: AsyncSession, user_id: uuid.UUID) -> Any:
         email=f"test-{user_id}@example.com",
         full_name="Test User",
         password_hash="$argon2id$v=19$m=65536,t=3,p=4$fake",
-        is_active=True,
     )
     db.add(user)
     await db.flush()

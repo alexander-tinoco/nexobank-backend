@@ -54,7 +54,6 @@ async def _create_user(db: AsyncSession) -> Any:
         email=f"user-{uuid.uuid4()}@test.com",
         full_name="Concurrency Tester",
         password_hash="$argon2id$v=19$m=65536,t=3,p=4$fake",
-        is_active=True,
     )
     db.add(user)
     await db.flush()
