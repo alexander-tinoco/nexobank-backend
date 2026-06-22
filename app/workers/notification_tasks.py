@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 CHANNEL_PREFIX = "nexobank:notifications:user:"
 
 
-@celery_app.task(  # type: ignore[misc]
+@celery_app.task(  # type: ignore[untyped-decorator]
     name="nexobank.send_transaction_notification",
     bind=True,
     max_retries=3,
@@ -88,7 +88,7 @@ def send_transaction_notification_task(
             })
             r.publish(f"{CHANNEL_PREFIX}{receiver_user_id}", receiver_payload)
 
-        r.close()  # type: ignore[no-untyped-call]
+        r.close()
         logger.info(
             "Transaction notifications published",
             extra={"tx_id": tx_id, "sender": sender_user_id},
@@ -97,7 +97,7 @@ def send_transaction_notification_task(
         raise self.retry(exc=exc, countdown=2 ** self.request.retries * 30)
 
 
-@celery_app.task(name="nexobank.send_login_alert")  # type: ignore[misc]
+@celery_app.task(name="nexobank.send_login_alert")  # type: ignore[untyped-decorator]
 def send_login_alert_task(user_id: str, ip_address: str, timestamp: str) -> None:
     """Alerta al usuario de un nuevo login desde IP nueva."""
     import json  # noqa: PLC0415
@@ -113,7 +113,7 @@ def send_login_alert_task(user_id: str, ip_address: str, timestamp: str) -> None
             "data": {"ip_address": ip_address, "timestamp": timestamp},
         })
         r.publish(f"{CHANNEL_PREFIX}{user_id}", payload)
-        r.close()  # type: ignore[no-untyped-call]
+        r.close()
     except Exception:
         pass
 

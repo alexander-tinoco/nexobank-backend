@@ -12,7 +12,7 @@ from app.workers.celery_app import celery_app
 logger = get_logger(__name__)
 
 
-@celery_app.task(  # type: ignore[misc]
+@celery_app.task(  # type: ignore[untyped-decorator]
     name="nexobank.evaluate_transaction_risk",
     bind=True,
     max_retries=2,

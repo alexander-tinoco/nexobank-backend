@@ -73,7 +73,7 @@ class RefreshTokenRepository:
             )
             .values(revoked=True)
         )
-        return result.rowcount or 0
+        return result.rowcount or 0  # type: ignore[attr-defined]
 
     @staticmethod
     async def delete_expired(db: AsyncSession) -> int:
@@ -85,4 +85,4 @@ class RefreshTokenRepository:
         result = await db.execute(
             delete(RefreshToken).where(RefreshToken.expires_at < now)
         )
-        return result.rowcount or 0
+        return result.rowcount or 0  # type: ignore[attr-defined]

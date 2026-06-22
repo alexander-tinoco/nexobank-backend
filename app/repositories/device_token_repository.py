@@ -79,4 +79,4 @@ class DeviceTokenRepository:
             .where(DeviceToken.user_id == user_id, DeviceToken.active == True)  # noqa: E712
             .values(active=False)
         )
-        return result.rowcount or 0
+        return result.rowcount or 0  # type: ignore[attr-defined]
