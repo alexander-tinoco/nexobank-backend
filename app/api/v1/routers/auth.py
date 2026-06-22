@@ -11,9 +11,9 @@ All business logic lives in ``app.services.auth_service``.  This layer only
 validates input, delegates to the service, and maps the result to HTTP.
 """
 
-from __future__ import annotations
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Body, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_active_user, get_db
@@ -66,8 +66,8 @@ async def register(
 )
 @limiter.limit("5/minute")
 async def login(
-    body: LoginRequest,
     request: Request,
+    body: Annotated[LoginRequest, Body()],
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Authenticate and return a JWT access token plus a refresh token.
@@ -109,6 +109,7 @@ async def refresh(
 @router.post(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Revoke a refresh token (logout)",
 )
 async def logout(
