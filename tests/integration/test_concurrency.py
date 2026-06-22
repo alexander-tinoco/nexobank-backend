@@ -72,6 +72,7 @@ async def _create_account(
 
     account = Account(
         user_id=user_id,
+        account_number=f"{currency.upper()}{uuid.uuid4().int % 10**12:012d}",
         balance=balance,
         currency=currency,
         status=AccountStatus.active,
